@@ -36,6 +36,18 @@ fn get_output_dir(app_src: &str, options: &DockerBuilderOptions) -> Result<Outpu
     }
 }
 
+fn command_to_string(command: &Command) -> String {
+    let args = command
+        .get_args()
+        .map(|arg| arg.to_string_lossy())
+        .collect::<Vec<_>>();
+    format!(
+        "{} {}",
+        command.get_program().to_string_lossy(),
+        args.join(" ")
+    )
+}
+
 use async_trait::async_trait;
 
 #[async_trait]
@@ -77,10 +89,17 @@ impl ImageBuilder for DockerImageBuilder {
         plan.write_supporting_files(&self.options, env, &output)
             .context("Writing supporting files")?;
 
+        let mut docker_build_cmd = self.get_docker_build_cmd(plan, name.as_str(), &output)?;
+
+        if self.options.out_dir.is_some() {
+            let command_path = output.get_absolute_path("build.sh");
+            File::create(command_path.clone()).context("Creating command.sh file")?;
+            fs::write(command_path, command_to_string(&docker_build_cmd))
+                .context("Write command")?;
+        }
+
         // Only build if the --out flag was not specified
         if self.options.out_dir.is_none() {
-            let mut docker_build_cmd = self.get_docker_build_cmd(plan, name.as_str(), &output)?;
-
             // Execute docker build
             let build_result = docker_build_cmd.spawn()?.wait().context("Building image")?;
             if !build_result.success() {
@@ -124,10 +143,6 @@ impl DockerImageBuilder {
     ) -> Result<Command> {
         let mut docker_build_cmd = Command::new("docker");
 
-        if docker_build_cmd.output().is_err() {
-            bail!("Please install Docker to build the app https://docs.docker.com/engine/install/")
-        }
-
         // Enable BuildKit for all builds
         docker_build_cmd.env("DOCKER_BUILDKIT", "1");
 
@@ -135,12 +150,20 @@ impl DockerImageBuilder {
             .arg("build")
             .arg(&output.root)
             .arg("-f")
-            .arg(&output.get_absolute_path("Dockerfile"))
+            .arg(output.get_absolute_path("Dockerfile"))
             .arg("-t")
             .arg(name);
 
         if self.options.verbose {
             docker_build_cmd.arg("--progress=plain");
+        }
+
+        if !self.options.add_host.is_empty() {
+            for host in &self.options.add_host {
+                docker_build_cmd.arg("--add-host").arg(host);
+            }
+
+            docker_build_cmd.arg("--network").arg("host");
         }
 
         if self.options.quiet {
@@ -153,6 +176,24 @@ impl DockerImageBuilder {
 
         if let Some(value) = &self.options.cache_from {
             docker_build_cmd.arg("--cache-from").arg(value);
+        }
+
+        if !self.options.docker_output.is_empty() {
+            for output in &self.options.docker_output {
+                docker_build_cmd.arg("--output").arg(output);
+            }
+        }
+
+        if let Some(value) = &self.options.docker_host {
+            docker_build_cmd.env("DOCKER_HOST", value);
+        }
+
+        if let Some(value) = &self.options.docker_tls_verify {
+            docker_build_cmd.env("DOCKER_TLS_VERIFY", value);
+        }
+
+        if let Some(value) = &self.options.docker_cert_path {
+            docker_build_cmd.env("DOCKER_CERT_PATH", value);
         }
 
         if self.options.inline_cache {
@@ -177,6 +218,13 @@ impl DockerImageBuilder {
         }
         for l in self.options.platform.clone() {
             docker_build_cmd.arg("--platform").arg(l);
+        }
+
+        if let Some(cpu_quota) = self.options.cpu_quota.clone() {
+            docker_build_cmd.arg("--cpu-quota").arg(cpu_quota);
+        }
+        if let Some(memory) = self.options.memory.clone() {
+            docker_build_cmd.arg("--memory").arg(memory);
         }
 
         Ok(docker_build_cmd)

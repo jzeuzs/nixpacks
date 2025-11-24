@@ -4,12 +4,14 @@ title: Installation
 
 # {% $markdoc.frontmatter.title %}
 
+> **⚠️ Maintenance Mode:** This project is currently in maintenance mode and is not under active development. We recommend using [Railpack](https://github.com/railwayapp/railpack) as a replacement.
+
 ## Homebrew
 
 Install Nixpacks with [Homebrew](https://brew.sh/) (macOS Only)
 
 ```sh
-brew install railwayapp/tap/nixpacks
+brew install nixpacks
 ```
 
 ## MacPorts
@@ -27,6 +29,8 @@ Download Nixpacks from GH releases and install automatically
 ```sh
 curl -sSL https://nixpacks.com/install.sh | bash
 ```
+
+This works across all supported platforms.
 
 ## PowerShell
 
@@ -53,6 +57,10 @@ Install Nixpacks from Scoop using the [official bucket](https://github.com/Scoop
 ```powershell
 scoop install nixpacks
 ```
+
+## Windows
+
+Nixpacks provides `.msi` files provided in each [release](https://github.com/railwayapp/nixpacks/releases).
 
 ## Source
 
